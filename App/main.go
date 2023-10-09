@@ -71,7 +71,7 @@ func ProcessRequestConcurrently(w http.ResponseWriter, r *http.Request) {
 
 		query = "UPDATE sessao SET ultimoacesso = $1 WHERE hashsessao = $2"
 
-		_, _ = db.Exec(query, time.Now(), apiKey)
+		go db.Exec(query, time.Now(), apiKey)
 
 		if rows.Next() {
 			var userId int
