@@ -1,0 +1,26 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Docker Login
+      env:
+        DOCKER_EMAIL: ${{secrets.DOCKER_EMAIL}}
+        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+      run: |
+        docker login -u $DOCKER_EMAIL -p $DOCKER_PASSWORD
+
+    - name: Build Docker Image
+      run: cd App && docker build . --tag ${{secrets.DOCKER_USER}}/${{secrets.DOCKER_IMAGE_NAME}}:dev
+    
+    - name: Docker Push
+      run: cd App && docker push ${{secrets.DOCKER_USER}}/${{secrets.DOCKER_IMAGE_NAME}}:dev
