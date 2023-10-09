@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -19,7 +18,6 @@ type Response struct {
 }
 
 var db *sql.DB
-var wg sync.WaitGroup
 
 func main() {
 	dbName, _ := os.LookupEnv("DB_NAME")
@@ -47,47 +45,42 @@ func main() {
 }
 
 func ProcessRequestConcurrently(w http.ResponseWriter, r *http.Request) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		authorizeHeader := r.Header.Get("Authorize")
+	authorizeHeader := r.Header.Get("Authorize")
 
-		if authorizeHeader == "" {
-			response, _ := json.Marshal(Response{UserId: 0})
-			http.Error(w, string(response), http.StatusForbidden)
-			return
-		}
+	if authorizeHeader == "" {
+		response, _ := json.Marshal(Response{UserId: 0})
+		http.Error(w, string(response), http.StatusForbidden)
+		return
+	}
 
-		query := "SELECT fk_idusuario FROM Sessao WHERE hashsessao = $1"
+	query := "SELECT fk_idusuario FROM Sessao WHERE hashsessao = $1"
 
-		apiKey := strings.Replace(authorizeHeader, "Bearer ", "", 1)
+	apiKey := strings.Replace(authorizeHeader, "Bearer ", "", 1)
 
-		rows, err := db.Query(query, apiKey)
+	rows, err := db.Query(query, apiKey)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	defer rows.Close()
+
+	query = "UPDATE sessao SET ultimoacesso = $1 WHERE hashsessao = $2"
+
+	go db.Exec(query, time.Now(), apiKey)
+
+	if rows.Next() {
+		var userId int
+		err := rows.Scan(&userId)
 		if err != nil {
 			log.Fatal(err)
 			return
 		}
-		defer rows.Close()
-
-		query = "UPDATE sessao SET ultimoacesso = $1 WHERE hashsessao = $2"
-
-		go db.Exec(query, time.Now(), apiKey)
-
-		if rows.Next() {
-			var userId int
-			err := rows.Scan(&userId)
-			if err != nil {
-				log.Fatal(err)
-				return
-			}
-			response, _ := json.Marshal(Response{UserId: userId})
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(response)
-		} else {
-			response, _ := json.Marshal(Response{UserId: 0})
-			http.Error(w, string(response), http.StatusForbidden)
-		}
-	}()
-	wg.Wait()
+		response, _ := json.Marshal(Response{UserId: userId})
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(response)
+	} else {
+		response, _ := json.Marshal(Response{UserId: 0})
+		http.Error(w, string(response), http.StatusForbidden)
+	}
 }
